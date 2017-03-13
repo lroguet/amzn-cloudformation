@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  Resources for hosting a static website (generated with Hugo for example).
+
+################################################################################
+Parameters:
+################################################################################
+
+  AcmCertificateArn:
+    Type: String
+    Description: >
+      The ARN of the SSL certificate to use for the CloudFront distribution. Only
+      needed when creating a CloudFront distribution.
+
+  DomainName:
+    Type: String
+    Description: The website domain name.
+    Default: lroguet.example
+
+  WithCloudFront:
+    Type: String
+    Description: Whether or not a CloudFront distribution should be created.
+    Default: No
+    AllowedValues:
+      - No
+      - Yes
+
+################################################################################
+Conditions:
+################################################################################
+
+  CreateCloudFrontDistribution: !Equals [ !Ref WithCloudFront, true ]
+
+################################################################################
+Resources:
+################################################################################
+
+  TheCloudFrontDistribution:
+    Condition: CreateCloudFrontDistribution
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Aliases:
+          - !Ref DomainName
+        DefaultCacheBehavior:
+          Compress: true
+          ForwardedValues:
+            QueryString: false
+          TargetOriginId: the-s3-bucket
+          ViewerProtocolPolicy: redirect-to-https
+        Enabled: true
+        HttpVersion: http2
+        Origins:
+          - DomainName: !Join [ "", [ !Ref DomainName, ".s3-website-", !Ref "AWS::Region", ".amazonaws.com" ] ]
+            Id: the-s3-bucket
+            CustomOriginConfig:
+              HTTPPort: '80'
+              HTTPSPort: '443'
+              OriginProtocolPolicy: http-only
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          AcmCertificateArn: !Ref AcmCertificateArn
+          MinimumProtocolVersion: TLSv1
+          SslSupportMethod: sni-only
+
+  TheBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Ref DomainName
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: 404.html
+      Tags:
+        - Key: Domain
+          Value: !Ref DomainName
+
+  TheBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TheBucket
+      PolicyDocument:
+        Statement:
+          -
+            Action:
+              - s3:GetObject
+            Effect: Allow
+            Resource: !Join [ "", [ "arn:aws:s3:::", !Ref TheBucket, "/*" ] ]
+            Principal: "*"
