@@ -1,0 +1,219 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  Resources for creating public and private subnets, Internet and NAT gateways,
+  routing tables in two availabilty zones in a VPC. Default public subnets have
+  both 8186 available IPv4, private subnets have 16379 and 32763 available IPv4
+  (these values are for a 10.0.0.0/16 virtual private cloud).
+
+################################################################################
+Parameters:
+################################################################################
+
+  VPCStackName:
+    Type: String
+    Description: Name of the stack defining the VPC.
+
+  # IP ranges
+
+  CidrBlockPublicSubnetAzA:
+    Type: String
+    Description: >
+      The Classless Inter-Domain Routing block to use for the public subnet in
+      availability zone A.
+    Default: 10.0.192.0/19
+
+  CidrBlockPublicSubnetAzB:
+    Type: String
+    Description: >
+      The Classless Inter-Domain Routing block to use for the public subnet in
+      availability zone B.
+    Default: 10.0.224.0/19
+
+  CidrBlockPrivateSubnetAzA:
+    Type: String
+    Description: >
+      The Classless Inter-Domain Routing block to use for the private subnet in
+      availability zone A.
+    Default: 10.0.0.0/17
+
+  CidrBlockPrivateSubnetAzB:
+    Type: String
+    Description: >
+      The Classless Inter-Domain Routing block to use for the private subnet in
+      availability zone B.
+    Default: 10.0.128.0/18
+
+################################################################################
+Resources:
+################################################################################
+
+  ######################
+  ### Public subnets
+  ######################
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-InternetGateway"
+
+  VpcInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCStackName}-VpcId"
+      InternetGatewayId: !Ref InternetGateway
+
+  RouteTableOverInternetGateway:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCStackName}-VpcId"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-OverInternetGateway"
+
+  RouteOverInternetGateway:
+    DependsOn: VpcInternetGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTableOverInternetGateway
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  ### Availability zone A
+
+  PublicSubnetAzA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCStackName}-VpcId"
+      MapPublicIpOnLaunch: true
+      CidrBlock: !Ref CidrBlockPublicSubnetAzA
+      AvailabilityZone: !Select [ '0', 'Fn::GetAZs':  !Ref 'AWS::Region' ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PublicSubnetAzA"
+
+  PublicSubnetAzARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetAzA
+      RouteTableId: !Ref RouteTableOverInternetGateway
+
+  ### Availability zone B
+
+  PublicSubnetAzB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCStackName}-VpcId"
+      MapPublicIpOnLaunch: true
+      CidrBlock: !Ref CidrBlockPublicSubnetAzB
+      AvailabilityZone: !Select [ '1', 'Fn::GetAZs':  !Ref 'AWS::Region' ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PublicSubnetAzB"
+
+  PublicSubnetAzBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetAzB
+      RouteTableId: !Ref RouteTableOverInternetGateway
+
+  ######################
+  ### Private subnets
+  ######################
+
+  ### Availability zone A
+
+  ElasticIpOne:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGatewayAzA:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIpOne.AllocationId
+      SubnetId: !Ref PublicSubnetAzA
+
+  RouteTableOverNatGatewayAzA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCStackName}-VpcId"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-OverNatGatewayAzA"
+
+  RouteOverNatGatewayAzA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTableOverNatGatewayAzA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayAzA
+
+  PrivateSubnetAzA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCStackName}-VpcId"
+      CidrBlock: !Ref CidrBlockPrivateSubnetAzA
+      AvailabilityZone: !Select [ '0', 'Fn::GetAZs': !Ref 'AWS::Region' ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PrivateSubnetAzA"
+
+  PrivateSubnetAzARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetAzA
+      RouteTableId: !Ref RouteTableOverNatGatewayAzA
+
+  ### Availability zone B
+
+  ElasticIpTwo:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGatewayAzB:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIpTwo.AllocationId
+      SubnetId: !Ref PublicSubnetAzB
+
+  RouteTableOverNatGatewayAzB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCStackName}-VpcId"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-OverNatGatewayAzB"
+
+  RouteOverNatGatewayAzB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTableOverNatGatewayAzB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayAzB
+
+  PrivateSubnetAzB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCStackName}-VpcId"
+      CidrBlock: !Ref CidrBlockPrivateSubnetAzB
+      AvailabilityZone: !Select [ '1', 'Fn::GetAZs': !Ref 'AWS::Region' ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PrivateSubnetAzB"
+
+  PrivateSubnetAzBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetAzB
+      RouteTableId: !Ref RouteTableOverNatGatewayAzB
