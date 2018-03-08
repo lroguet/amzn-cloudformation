@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  Amazon Simple Storage Service (Amazon S3) bucket using server-side encryption
+  with Amazon S3-managed keys SSE-S3. With a lifecycle rule that aborts incomplete 
+  multipart uploads.
+
+################################################################################
+Parameters:
+################################################################################
+
+  BucketName:
+    Type: String
+    Description: The name of the S3 bucket
+
+  NumberOfDaysIncompleteMultipartUpload:
+    Type: Number
+    Description: >
+      The number of days after which incomplete multipart uploads are aborted.
+    Default: 7
+
+################################################################################
+Resources:
+################################################################################
+
+  TheBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: 
+          -
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          -
+            Id: MultipartUploadLifecycleRule
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: !Ref NumberOfDaysIncompleteMultipartUpload
