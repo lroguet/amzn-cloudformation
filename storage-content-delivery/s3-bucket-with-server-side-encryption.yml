@@ -4,9 +4,7 @@ Description: >
   with Amazon S3-managed keys SSE-S3. With a lifecycle rule that aborts incomplete 
   multipart uploads.
 
-################################################################################
 Parameters:
-################################################################################
 
   BucketName:
     Type: String
@@ -18,12 +16,19 @@ Parameters:
       The number of days after which incomplete multipart uploads are aborted.
     Default: 7
 
-################################################################################
+Outputs:
+
+  Bucket:
+    Description: The ARN of the S3 bucket
+    Value: !GetAtt TheBucket.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-bucket-arn"
+
 Resources:
-################################################################################
 
   TheBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Ref BucketName
       BucketEncryption:
