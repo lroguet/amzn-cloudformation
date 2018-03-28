@@ -73,7 +73,7 @@ Resources:
         ZipFile: |
 
           def lambda_handler(event, context):
-            return "Hello World!";
+            return "Hello World!"
 
       Handler: index.lambda_handler
       MemorySize: 128
