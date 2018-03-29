@@ -103,12 +103,13 @@ Resources:
         ZipFile: |
           'use strict';
           exports.handler = (event, context, callback) => {
+            var webExtensions = ['css', 'html', 'jpg', 'jpeg', 'js', 'png', 'xml'];
             // Request from CloudFront 
             var request = event.Records[0].cf.request;
             // Figure out if the uri is for a file with extension
             var extension = request.uri.split('.').pop();
             // '/posts'.split('.').pop() returns '/posts'
-            if (extension === request.uri) {
+            if (typeof extension == 'undefined' || !webExtensions.includes(extension)) {
               // Add default index to URI
               request.uri = request.uri.replace(/\/?$/, '\/index.html');
             }
