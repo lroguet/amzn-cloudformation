@@ -18,6 +18,13 @@ Parameters:
     Description: The website domain name.
     Default: lroguet.example
 
+  WhitelistedExtensions:
+    Type: String
+    Description: >
+      A comma delimited list of File extensions that are expected in a URL and
+      for which URL rewriting to a default index object should not be performed.
+    Default: "css,html,jpg,jpeg,js,png,ttf,txt,xml"
+
 ###############################################################################
 Resources:
 ###############################################################################
@@ -36,7 +43,7 @@ Resources:
           ViewerProtocolPolicy: redirect-to-https
           LambdaFunctionAssociations:
             - EventType: origin-request
-              LambdaFunctionARN: !Ref TheLambdaFunctionVersion
+              LambdaFunctionARN: !Ref TheOriginRequestLambdaFunctionVersion
         DefaultRootObject: index.html
         CustomErrorResponses:
           - ErrorCachingMinTTL: 300
@@ -69,7 +76,6 @@ Resources:
 
   TheBucket:
     Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration: 
@@ -94,43 +100,54 @@ Resources:
             Principal:
               CanonicalUser: !GetAtt TheCloudFrontOriginAccessIdentity.S3CanonicalUserId
 
-  TheLambdaFunction:
+  TheOriginRequestLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
       Description: >
         Lambda function performing request URI rewriting.
       Code:
-        ZipFile: |
+        ZipFile: !Sub |
           'use strict';
+          const AWS = require('aws-sdk');
+          const SSM = new AWS.SSM({region: 'us-east-1'});
           exports.handler = (event, context, callback) => {
-            var webExtensions = ['css', 'html', 'jpg', 'jpeg', 'js', 'png', 'txt', 'xml'];
-            // Request from CloudFront 
-            var request = event.Records[0].cf.request;
-            // Figure out if the uri is for a file with extension
-            var extension = request.uri.split('.').pop();
-            // '/posts'.split('.').pop() returns '/posts'
-            if (typeof extension == 'undefined' || !webExtensions.includes(extension)) {
-              // Add default index to URI
-              request.uri = request.uri.replace(/\/?$/, '\/index.html');
-            }
-            // Return request to CloudFront
-            return callback(null, request);
-          };
+            var params = {
+              Name: '${TheOriginRequestParameter}',
+              WithDecryption: false
+            };
+            SSM.getParameter(params, function(error, data) {
+              var whitelist = ['css', 'html', 'jpg', 'jpeg', 'png', 'txt', 'xml'];
+              if (data) {
+                whitelist = data.Parameter.Value.split(',');
+              }
+              // Original request
+              var request = event.Records[0].cf.request;
+              // Figure out if the uri is for a file with extension
+              var extension = request.uri.split('.').pop();
+              // '/posts'.split('.').pop() returns '/posts'
+              if (typeof extension == 'undefined' || !whitelist.includes(extension)) {
+                // Add default index to URI
+                request.uri = request.uri.replace(/\/?$/, '\/index.html');
+              }
+              // Return request to CloudFront
+              return callback(null, request);
+            });
+          };    
       Handler: index.handler
       MemorySize: 128
-      Role: !Sub ${TheLambdaFunctionExecutionRole.Arn}
+      Role: !Sub ${TheOriginRequestLambdaFunctionExecutionRole.Arn}
       Runtime: nodejs6.10
       Tags:
         - Key: Domain
           Value: !Ref DomainName
 
-  TheLambdaFunctionVersion:
+  TheOriginRequestLambdaFunctionVersion:
     Type: AWS::Lambda::Version
     Properties:
-      FunctionName: !Ref TheLambdaFunction
+      FunctionName: !Ref TheOriginRequestLambdaFunction
       Description: !Sub "URL rewriting for ${DomainName}"
 
-  TheLambdaFunctionExecutionRole:
+  TheOriginRequestLambdaFunctionExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -143,3 +160,20 @@ Resources:
                 - lambda.amazonaws.com
             Action:
               - sts:AssumeRole
+      Policies:
+        -
+          PolicyName: 'ParameterStoreAccess'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - 'ssm:GetParameter*'
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${TheOriginRequestParameter}'
+
+  TheOriginRequestParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: StringList
+      Value: !Ref WhitelistedExtensions
