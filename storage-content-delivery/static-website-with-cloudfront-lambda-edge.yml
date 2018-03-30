@@ -103,7 +103,7 @@ Resources:
         ZipFile: |
           'use strict';
           exports.handler = (event, context, callback) => {
-            var webExtensions = ['css', 'html', 'jpg', 'jpeg', 'js', 'png', 'xml'];
+            var webExtensions = ['css', 'html', 'jpg', 'jpeg', 'js', 'png', 'txt', 'xml'];
             // Request from CloudFront 
             var request = event.Records[0].cf.request;
             // Figure out if the uri is for a file with extension
