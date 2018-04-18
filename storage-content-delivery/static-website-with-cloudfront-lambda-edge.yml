@@ -18,6 +18,15 @@ Parameters:
     Description: The website domain name.
     Default: lroguet.example
 
+  PriceClass:
+    Type: String
+    Description: The CloudFront distribution price class
+    Default: 'PriceClass_All'
+    AllowedValues:
+      - 'PriceClass_100'
+      - 'PriceClass_200'
+      - 'PriceClass_All'
+
   WhitelistedExtensions:
     Type: String
     Description: >
@@ -59,7 +68,7 @@ Resources:
             S3OriginConfig:
               OriginAccessIdentity:
                 !Join [ "", [ "origin-access-identity/cloudfront/", !Ref TheCloudFrontOriginAccessIdentity ] ]
-        PriceClass: PriceClass_100
+        PriceClass: !Ref PriceClass
         ViewerCertificate:
           AcmCertificateArn: !Ref AcmCertificateArn
           MinimumProtocolVersion: TLSv1
