@@ -71,7 +71,7 @@ Resources:
         PriceClass: !Ref PriceClass
         ViewerCertificate:
           AcmCertificateArn: !Ref AcmCertificateArn
-          MinimumProtocolVersion: TLSv1
+          MinimumProtocolVersion: TLSv1.1_2016
           SslSupportMethod: sni-only
       Tags:
         - Key: Domain
