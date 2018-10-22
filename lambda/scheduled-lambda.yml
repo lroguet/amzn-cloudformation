@@ -1,10 +1,10 @@
-####################################################################################
 AWSTemplateFormatVersion: 2010-09-09
 Description: >
   Resources needed to deploy a scheduled lambda function.
 
 ####################################################################################
 Parameters:
+####################################################################################
 
   LambdaRate:
     Description: >
@@ -19,6 +19,7 @@ Parameters:
 
 ####################################################################################
 Resources:
+####################################################################################
 
   LambdaExecutionRole:
     Type: "AWS::IAM::Role"
@@ -32,18 +33,8 @@ Resources:
                 - lambda.amazonaws.com
             Action:
               - sts:AssumeRole
-      Policies:
-        - PolicyName: BasicExecutionPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Sid: CloudWatchLogsStatement
-                Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: arn:aws:logs:*:*:*
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
   LambdaSchedule:
     Type: "AWS::Events::Rule"
@@ -68,13 +59,13 @@ Resources:
     Type: "AWS::Lambda::Function"
     Properties:
       Description: >
-        Lambda function that returns 'Hello World!'.
+        Lambda function that returns 'Hello World!'
       Code:
         ZipFile: |
-
+          from __future__ import print_function
           def lambda_handler(event, context):
-            return "Hello World!"
-
+            print('Hello World!')
+            return 'Hello World!'
       Handler: index.lambda_handler
       MemorySize: 128
       Role: !Sub ${LambdaExecutionRole.Arn}
