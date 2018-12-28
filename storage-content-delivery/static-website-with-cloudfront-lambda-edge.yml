@@ -35,6 +35,16 @@ Parameters:
     Default: "css,html,ico,jpg,jpeg,js,png,ttf,txt,webp,xml"
 
 ###############################################################################
+Outputs:
+###############################################################################
+
+  TheBucketArn:
+    Description: The ARN of the S3 bucket hosting the static content.
+    Value: !GetAtt TheBucket.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-bucket-arn
+
+###############################################################################
 Resources:
 ###############################################################################
 
