@@ -1,0 +1,119 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  Scheduled Lambda function that go through all AWS regions and make sure no
+  CloudWatch Logs log group is left without a retention policy.
+
+####################################################################################
+Parameters:
+####################################################################################
+
+  LambdaRate:
+    Description: >
+      Defines how often the schduled Lambda function should run.
+    Default: rate(7 days)
+    AllowedValues:
+      - rate(1 day)
+      - rate(7 days)
+      - rate(30 days)
+    Type: String
+
+  RetentionInDays:
+    Description: >
+      The retention in days for the CloudWatch Logs log groups found missing
+      a retention policy.
+    Default: 7
+    Type: Number
+
+####################################################################################
+Resources:
+####################################################################################
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        -
+          PolicyName: RegionsRetentionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - logs:DescribeLogGroups
+                  - logs:PutRetentionPolicy
+                Resource: '*'
+
+  LambdaSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: CloudWatch Logs log group retention policy schedule.
+      ScheduleExpression: !Ref LambdaRate
+      State: ENABLED
+      Targets:
+        - Arn: !Sub ${LambdaFunction.Arn}
+          Id: LambdaSchedule
+
+  LambdaSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Sub ${LambdaFunction.Arn}
+      Principal: 'events.amazonaws.com'
+      SourceArn: !Sub ${LambdaSchedule.Arn}
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: >
+        Ensures all CloudWatch Logs log groups have a retention policy in all regions.
+      Environment:
+        Variables:
+          RETENTION_IN_DAYS: !Ref RetentionInDays
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          import os
+
+          RETENTION_IN_DAYS = int(os.environ.get('RETENTION_IN_DAYS'))
+
+          def lambda_handler(event, context):
+
+            session = boto3.Session()
+            client = session.client('ec2', region_name='${AWS::Region}')
+
+            retention_policies_updated = 0
+            for region_dict in client.describe_regions()['Regions']:
+              region = region_dict['RegionName']
+              logs = session.client('logs', region_name=region)
+              log_groups = logs.describe_log_groups()
+
+              for log_group in log_groups['logGroups']:
+                log_group_name = log_group['logGroupName']
+                if not 'retentionInDays' in log_group:      
+                  response = logs.put_retention_policy(
+                    logGroupName=log_group_name,
+                    retentionInDays=RETENTION_IN_DAYS
+                  )
+                  retention_policies_updated += 1
+
+            return {
+              'message': '{} CloudWatch Logs retention policies enforced.'.format(retention_policies_updated)
+            }
+      Handler: index.lambda_handler
+      MemorySize: 256
+      Role: !Sub ${LambdaExecutionRole.Arn}
+      Runtime: python3.6
+      Timeout: 30
